@@ -54,8 +54,10 @@ class InterpolatedGlyphSubscriber(Subscriber):
 
         currentGlyph = CurrentGlyph()
         self.referenceGlyphLayer.setPosition((currentGlyph.width + 30, 0))
+        self.referenceGlyphLayer.setPath(None)
         self.referenceGlyphLayer.clearSublayers()
         self.previewGlyphLayer.setPosition((currentGlyph.width + 30, 0))
+        self.previewGlyphLayer.setPath(None)
         self.previewGlyphLayer.clearSublayers()
 
         interpValue = self.controller.w.getItemValue("interpolationSlider")
@@ -96,7 +98,7 @@ class InterpolatedGlyphSubscriber(Subscriber):
         # Draw the interpolated glyph outlines
         isDarkMode = inDarkMode()
         glyphPath = self.interpolatedGlyph.getRepresentation("merz.CGPath")
-        self.referenceGlyphLayer .setPath(glyphPath)
+        self.referenceGlyphLayer.setPath(glyphPath)
 
         for contour in self.interpolatedGlyph.contours:
             for bPoint in contour.bPoints:
@@ -339,4 +341,4 @@ registerSubscriberEvent(
     debug=True
 )
 
-InterpolationSliderInterface()
+OpenWindow(InterpolationSliderInterface)
