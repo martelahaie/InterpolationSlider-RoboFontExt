@@ -1,6 +1,7 @@
 import ezui
 import merz
 from mojo.events import postEvent
+from mojo.pens import DecomposePointPen
 from mojo.roboFont import AllFonts, CurrentGlyph, RGlyph
 from mojo.subscriber import Subscriber, registerGlyphEditorSubscriber, registerSubscriberEvent, unregisterGlyphEditorSubscriber
 from mojo.UI import inDarkMode    
@@ -12,12 +13,17 @@ by Andy Clymer, June 2018
 
 DEFAULT_KEY = "com.andyclymer.interpolationSlider"
 
-class drawinterpolatedGlyph(Subscriber):
+
+class InterpolatedGlyphSubscriber(Subscriber):
 
     debug = True
     controller = None
 
     def build(self):
+        isDarkMode = inDarkMode()
+        self.isPreview = False
+        self.prevWidth = 0
+
         glyphEditor = self.getGlyphEditor()
         
         self.container = glyphEditor.extensionContainer(
@@ -30,10 +36,14 @@ class drawinterpolatedGlyph(Subscriber):
             location='preview',
             clear=True
         )
-        self.referenceGlyphLayer = self.container.appendBaseSublayer()
-        self.previewGlyphLayer = self.previewContainer.appendBaseSublayer()
-        self.isPreview = False
-        self.prevWidth = 0
+        self.referenceGlyphLayer = self.container.appendPathSublayer(
+            fillColor=None,
+            strokeColor=(isDarkMode, isDarkMode, isDarkMode, 1),
+            strokeWidth=.5,
+        )
+        self.previewGlyphLayer = self.previewContainer.appendPathSublayer(
+            fillColor=(isDarkMode, isDarkMode, isDarkMode, .4),
+        )
         
     def destroy(self):
         self.container.clearSublayers()
@@ -52,8 +62,18 @@ class drawinterpolatedGlyph(Subscriber):
 
         if currentGlyph.name in self.controller.source0 and currentGlyph.name in self.controller.source1:
 
-            glyph0 = self.controller.source0[currentGlyph.name]
-            glyph1 = self.controller.source1[currentGlyph.name]
+            sourceGlyph0 = self.controller.source0[currentGlyph.name]
+            sourceGlyph1 = self.controller.source1[currentGlyph.name]
+
+            glyph0 = RGlyph()
+            dstPen = glyph0.getPointPen()
+            decomposePen = DecomposePointPen(self.controller.source0, dstPen)
+            sourceGlyph0.drawPoints(decomposePen)
+
+            glyph1 = RGlyph()
+            dstPen = glyph1.getPointPen()
+            decomposePen = DecomposePointPen(self.controller.source1, dstPen)
+            sourceGlyph1.drawPoints(decomposePen)            
 
             self.interpolatedGlyph = RGlyph()
             # Interpolate
@@ -75,13 +95,8 @@ class drawinterpolatedGlyph(Subscriber):
     def drawGlyph(self):
         # Draw the interpolated glyph outlines
         isDarkMode = inDarkMode()
-        glyphLayer = self.referenceGlyphLayer.appendPathSublayer(
-            fillColor=None,
-            strokeColor=(isDarkMode, isDarkMode, isDarkMode, 1),
-            strokeWidth=.5,
-        )
         glyphPath = self.interpolatedGlyph.getRepresentation("merz.CGPath")
-        glyphLayer.setPath(glyphPath)
+        self.referenceGlyphLayer .setPath(glyphPath)
 
         for contour in self.interpolatedGlyph.contours:
             for bPoint in contour.bPoints:
@@ -133,14 +148,9 @@ class drawinterpolatedGlyph(Subscriber):
  
     def drawPreviewGlyph(self):
         # Draw a filled in version of the interpolated glyph
-        isDarkMode = inDarkMode()
         self.previewGlyphLayer.clearSublayers()
-        glyphLayer = self.previewGlyphLayer.appendPathSublayer(
-            fillColor=(isDarkMode, isDarkMode, isDarkMode, .4),
-        )
         glyphPath = self.interpolatedGlyph.getRepresentation("merz.CGPath")
-        glyphLayer.setPath(glyphPath)
-    
+        self.previewGlyphLayer.setPath(glyphPath)
 
     def addPoints(self, pt0, pt1):
         return (pt0[0] + pt1[0], pt0[1] + pt1[1])
@@ -217,12 +227,12 @@ class InterpolationSliderInterface(Subscriber, ezui.WindowController):
         self.collectFonts()
         self.optionsChanged()
 
-        drawinterpolatedGlyph.controller = self
-        registerGlyphEditorSubscriber(drawinterpolatedGlyph)
+        InterpolatedGlyphSubscriber.controller = self
+        registerGlyphEditorSubscriber(InterpolatedGlyphSubscriber)
 
     def destroy(self):
-        unregisterGlyphEditorSubscriber(drawinterpolatedGlyph)
-        drawinterpolatedGlyph.controller = None
+        unregisterGlyphEditorSubscriber(InterpolatedGlyphSubscriber)
+        InterpolatedGlyphSubscriber.controller = None
 
     def interpolationSliderCallback(self, sender):
         postEvent(eventName)
@@ -286,9 +296,9 @@ class InterpolationSliderInterface(Subscriber, ezui.WindowController):
         # Add a number to the name if this name already exists
         if name in fonts:
             i = 2
-            while name + " (%s)" % i in fonts:
+            while f"{name} {i}" in fonts:
                 i += 1
-            name = name + " (%s)" % i
+            name = f"{name} {i}"
         return name
 
     def fontDocumentDidOpenNew(self, info):
